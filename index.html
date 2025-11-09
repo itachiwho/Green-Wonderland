@@ -1,282 +1,140 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8" />
+  <title>Green Wonderland • Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Green Wonderland • Portal</title>
-  <link rel="stylesheet" href="./style.css" />
+  <style>
+    body { font-family: system-ui, sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; background: #0b1220; color: #e5e7eb; }
+    .card { background: #111827; padding: 28px; border-radius: 14px; width: min(620px, 92vw); box-shadow: 0 10px 30px #0007; }
+    h1 { margin: 0 0 8px; }
+    button { cursor: pointer; padding: 10px 14px; border: 0; border-radius: 10px; font-weight: 600; }
+    .primary { background: #22c55e; color: #062b12; }
+    .muted { background: #1f2937; color: #cbd5e1; }
+    .row { display: flex; gap: 10px; margin-top: 14px; }
+    pre { background:#0f172a; padding:10px; border-radius:8px; overflow:auto; max-height:220px; font-size:13px;}
+  </style>
 </head>
 <body>
-  <!-- LOGIN CARD -->
-  <div class="center stage" id="loginStage" aria-hidden="false">
-    <div class="card">
-      <h1>🌿 Green Wonderland Portal</h1>
-      <p class="muted" id="status">Checking session…</p>
-      <div class="row gap" id="loginActions" style="display:none;">
-        <button class="btn btn-primary" id="loginBtn">Login with Discord</button>
-      </div>
-      <p class="hint">We never use email — Discord ID only.</p>
+  <div class="card">
+    <h1>Green Wonderland Portal</h1>
+    <p id="status">Checking session…</p>
+    <div class="row" id="actions" style="display:none;">
+      <button class="primary" id="login">Login with Discord</button>
+      <button class="muted" id="logout">Logout</button>
+    </div>
+    <p style="margin-top:12px; font-size:14px; opacity:.9;">
+      After you log in the first time, we’ll create your profile automatically.
+    </p>
+    <div style="margin-top:14px;">
+      <strong>Debug:</strong>
+      <pre id="debug"></pre>
     </div>
   </div>
 
-  <!-- APP SHELL (shown after login) -->
-  <div id="appShell" class="container" style="display:none;">
-    <header class="topbar">
-      <div>
-        <div class="brand">🌿 Green Wonderland</div>
-        <div class="muted" id="who"></div>
-      </div>
-      <nav class="tabs">
-        <button class="tab active" data-panel="billing">Billing</button>
-        <button class="tab" data-panel="history">History</button>
-        <button class="tab" data-panel="revenue">Revenue</button>
-        <button class="btn btn-ghost" id="logoutBtn">Logout</button>
-      </nav>
-    </header>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script>
+    // 🔧 Your project details
+    const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
 
-    <!-- BILLING PANEL -->
-    <section id="panel-billing" class="panel">
-      <div class="grid">
-        <div class="card sect">
-          <h3>Items</h3>
-          <p class="muted">Pick items and set quantities. Prices are RP dollars.</p>
-          <div id="items"></div>
-        </div>
-        <div class="card sect">
-          <h3>Cart</h3>
-          <div class="summary">
-            <div class="row between"><span class="muted">Subtotal</span><span id="subtotal">$0</span></div>
-            <div class="row between"><label class="muted" for="discount">Discount</label><input id="discount" type="number" min="0" value="0"/></div>
-            <div class="row between total"><span>Total</span><span id="total">$0</span></div>
-          </div>
-          <div class="footer">
-            <button id="clear" class="btn btn-ghost">Clear</button>
-            <button id="save" class="btn btn-primary" disabled>Save Sale</button>
-            <span id="statusBadge" class="badge" style="display:none"></span>
-          </div>
-        </div>
-      </div>
-    </section>
+    // GitHub Pages paths (must match repo name & case)
+    const BASE_PATH   = "/Green-Wonderland/";
+    const BASE_URL    = window.location.origin + BASE_PATH;              // e.g., .../Green-Wonderland/
+    const BILLING_URL = window.location.origin + BASE_PATH + "billing.html";
 
-    <!-- HISTORY PANEL -->
-    <section id="panel-history" class="panel" hidden>
-      <div class="card">
-        <div class="filters">
-          <label>From <input type="date" id="hFrom"></label>
-          <label>To <input type="date" id="hTo"></label>
-          <label id="hWhoWrap" style="display:none;">Employee
-            <select id="hEmployee"></select>
-          </label>
-          <button id="hApply" class="btn btn-primary">Apply</button>
-          <button id="hExport" class="btn btn-ghost">Export .xlsx</button>
-        </div>
-        <div class="kpi three">
-          <div class="card kpiCard"><div class="muted">Subtotal</div><div id="hkSub" class="kpiVal">$0</div></div>
-          <div class="card kpiCard"><div class="muted">Discount</div><div id="hkDis" class="kpiVal">$0</div></div>
-          <div class="card kpiCard"><div class="muted">Total</div><div id="hkTot" class="kpiVal accent">$0</div></div>
-        </div>
-      </div>
-      <div class="card mt">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Employee</th>
-              <th>Sale #</th>
-              <th>Item</th>
-              <th class="right">Qty</th>
-              <th class="right">Unit</th>
-              <th class="right">Line Total</th>
-              <th class="right">Sale Total</th>
-            </tr>
-          </thead>
-          <tbody id="hRows"></tbody>
-        </table>
-        <div id="hEmpty" class="muted" style="display:none;margin:6px 2px;">No sales in this range.</div>
-      </div>
-    </section>
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    <!-- REVENUE PANEL -->
-    <section id="panel-revenue" class="panel" hidden>
-      <div class="card">
-        <div class="filters">
-          <label>From <input type="date" id="rFrom"></label>
-          <label>To <input type="date" id="rTo"></label>
-          <label>Bucket
-            <select id="rBucket">
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month" selected>Month</option>
-            </select>
-          </label>
-          <label id="rWhoWrap" style="display:none;">Employee
-            <select id="rEmployee"></select>
-          </label>
-          <button id="rApply" class="btn btn-primary">Apply</button>
-          <button id="rExport" class="btn btn-ghost">Export .xlsx</button>
-        </div>
-        <div class="kpi four">
-          <div class="card kpiCard"><div class="muted">Orders</div><div id="rkOrders" class="kpiVal">0</div></div>
-          <div class="card kpiCard"><div class="muted">Subtotal</div><div id="rkSub" class="kpiVal">$0</div></div>
-          <div class="card kpiCard"><div class="muted">Discount</div><div id="rkDis" class="kpiVal">$0</div></div>
-          <div class="card kpiCard"><div class="muted">Total</div><div id="rkTot" class="kpiVal accent">$0</div></div>
-        </div>
-      </div>
-      <div class="card mt">
-        <canvas id="revChart" height="260"></canvas>
-      </div>
-      <div class="card mt">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Bucket</th>
-              <th class="right">Orders</th>
-              <th class="right">Subtotal</th>
-              <th class="right">Discount</th>
-              <th class="right">Total</th>
-            </tr>
-          </thead>
-          <tbody id="rRows"></tbody>
-        </table>
-        <div id="rEmpty" class="muted" style="display:none;margin:6px 2px;">No sales in this range.</div>
-      </div>
-    </section>
-  </div>
+    const statusEl = document.getElementById('status');
+    const actionsEl = document.getElementById('actions');
+    const loginBtn = document.getElementById('login');
+    const logoutBtn = document.getElementById('logout');
+    const debugEl = document.getElementById('debug');
 
-  <!-- libs -->
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    const log = (data) => {
+      try {
+        debugEl.textContent += (typeof data === "string" ? data : JSON.stringify(data, null, 2)) + "\n";
+      } catch {}
+      console.log(data);
+    };
 
-<script>
-  // 🔧 Project details
-  const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
+    (async () => {
+      log({ SUPABASE_URL, keyPrefix: SUPABASE_ANON_KEY.slice(0, 10) + "..." });
+      log({ href: window.location.href });
 
-  // Build BASE_URL dynamically (works locally and on GitHub Pages)
-  const REPO = "Green-Wonderland";
-  const hasRepo = window.location.pathname.includes(`/${REPO}/`);
-  const BASE_PATH = hasRepo ? `/${REPO}/` : "/";
-  const BASE_URL  = window.location.origin + BASE_PATH;
+      // Handle OAuth return: code flow or (older) hash tokens
+      const href = window.location.href;
+      const url = new URL(href);
+      const hasCode = url.searchParams.get("code");
+      const errDesc = url.searchParams.get("error_description");
 
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-  // DOM refs
-  const loginStage = document.getElementById('loginStage');
-  const loginBtn   = document.getElementById('loginBtn');
-  const logoutBtn  = document.getElementById('logoutBtn');
-  const statusEl   = document.getElementById('status');
-  const who        = document.getElementById('who');
-  const appShell   = document.getElementById('appShell');
-
-  function show(msg){
-    if (statusEl) statusEl.textContent = msg;
-    console.log("[auth]", msg);
-  }
-
-  function showUrlErrors() {
-    const u = new URL(window.location.href);
-    const err = u.searchParams.get("error_description") || u.searchParams.get("error");
-    if (err) show(`OAuth error: ${decodeURIComponent(err)}`);
-  }
-
-  async function handleOAuthReturn() {
-    const href = window.location.href;
-    const url  = new URL(href);
-
-    if (url.searchParams.get("code")) {
-      show("Exchanging code for session…");
-      const { error } = await supabase.auth.exchangeCodeForSession(href);
-      // Clean the URL (remove ?code=…)
-      history.replaceState({}, "", BASE_URL);
-      if (error) {
-        show("Login failed: " + (error.message || "exchangeCodeForSession error"));
-        return false;
+      if (errDesc) {
+        statusEl.textContent = "OAuth error: " + errDesc;
+        log("OAuth error_description: " + errDesc);
       }
-      show("Code exchange OK.");
-      return true;
-    }
 
-    // Legacy hash flow: clean it if present
-    if (href.includes("#access_token=")) {
-      history.replaceState({}, "", BASE_URL);
-      show("Cleaned legacy hash from URL.");
-    }
-    return false;
-  }
+      if (hasCode) {
+        log("Detected code param; exchanging for session…");
+        const { error } = await supabase.auth.exchangeCodeForSession(href);
+        // Clean URL either way
+        history.replaceState({}, "", BASE_URL);
+        if (error) {
+          statusEl.textContent = "Login failed: " + error.message;
+          log({ exchange_error: error });
+        } else {
+          // ✅ Go straight to Billing after successful login
+          window.location.href = BILLING_URL;
+          return;
+        }
+      } else if (href.includes("#access_token=")) {
+        // Clean legacy implicit hash and go to Billing
+        history.replaceState({}, "", BASE_URL);
+        window.location.href = BILLING_URL;
+        return;
+      }
 
-  async function boot() {
-    showUrlErrors();
+      // Check existing session
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        statusEl.textContent = "Session check failed: " + error.message;
+        log({ getSession_error: error });
+        actionsEl.style.display = "flex";
+        logoutBtn.style.display = "none";
+        return;
+      }
 
-    const didExchange = await handleOAuthReturn();
+      if (session?.user) {
+        // ✅ Already logged in → go to Billing
+        window.location.href = BILLING_URL;
+        return;
+      } else {
+        statusEl.textContent = "You are not logged in.";
+        actionsEl.style.display = "flex";
+        logoutBtn.style.display = "none";
+      }
+    })();
 
-    // Always check the session after handling return
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) {
-      show("Session check failed: " + error.message);
-      document.getElementById('loginActions')?.style?.setProperty('display','flex');
-      return;
-    }
-    if (session?.user) {
-      show("Session found; entering app…");
-      showApp(session);
-      return;
-    }
-
-    // If we just exchanged but no session, warn clearly
-    if (didExchange) {
-      show("Code exchanged, but no session received. Double-check Supabase Auth URL settings and Discord redirect.");
-    } else {
-      show("You are not logged in.");
-    }
-    document.getElementById('loginActions')?.style?.setProperty('display','flex');
-  }
-
-  // If session appears slightly later, still enter app
-  supabase.auth.onAuthStateChange((event, session) => {
-    console.log("[auth state]", event, session?.user?.id);
-    if (event === "SIGNED_IN" && session?.user) {
-      show("Signed in via auth state.");
-      showApp(session);
-    }
-    if (event === "SIGNED_OUT") {
-      loginStage.style.display = '';
-      appShell.style.display = 'none';
-      show("Signed out.");
-    }
-  });
-
-  loginBtn?.addEventListener('click', async () => {
-    show("Redirecting to Discord…");
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'discord',
-      options: {
-        redirectTo: BASE_URL,  // MUST match Supabase Site URL + Redirect URL
-        scopes: 'identify'     // no email
+    // Step 3: Login with Discord (only 'identify' scope, no email)
+    loginBtn?.addEventListener("click", async () => {
+      log("Starting Discord OAuth with redirectTo=" + BASE_URL);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+          redirectTo: BASE_URL,
+          scopes: "identify"   // request no email scope
+        }
+      });
+      if (error) {
+        alert("OAuth error: " + error.message);
+        log({ oauth_error: error });
       }
     });
-    if (error) show("OAuth start failed: " + error.message);
-  });
 
-  logoutBtn?.addEventListener('click', async () => {
-    await supabase.auth.signOut();
-    location.href = BASE_URL;
-  });
-
-  async function showApp(session){
-    const meta = session.user.user_metadata || {};
-    who.textContent = `Signed in as ${meta.name || meta.full_name || 'Employee'}`;
-    loginStage.style.display = 'none';
-    appShell.style.display = '';
-    // Your existing init calls:
-    await initTabs();
-    await billingInit(session);
-    await historyInit(session);
-    await revenueInit(session);
-  }
-
-  // Kick off auth
-  boot();
-</script>
+    // Step 4: Logout
+    logoutBtn?.addEventListener("click", async () => {
+      await supabase.auth.signOut();
+      location.reload();
+    });
+  </script>
 </body>
 </html>
