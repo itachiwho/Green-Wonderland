@@ -105,18 +105,21 @@
       }
     })();
 
-    // Step 3: Login with Discord
-    loginBtn?.addEventListener("click", async () => {
-      log("Starting Discord OAuth with redirectTo=" + BASE_URL);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "discord",
-        options: { redirectTo: BASE_URL }
-      });
-      if (error) {
-        alert("OAuth error: " + error.message);
-        log({ oauth_error: error });
-      }
-    });
+// Step 3: Login with Discord (only 'identify' scope, no email)
+loginBtn?.addEventListener("click", async () => {
+  log("Starting Discord OAuth with redirectTo=" + BASE_URL);
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "discord",
+    options: {
+      redirectTo: BASE_URL,
+      scopes: "identify"   // 👈 disables email access
+    }
+  });
+  if (error) {
+    alert("OAuth error: " + error.message);
+    log({ oauth_error: error });
+  }
+});
 
     // Step 4: Logout
     logoutBtn?.addEventListener("click", async () => {
