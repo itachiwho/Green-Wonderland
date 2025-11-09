@@ -42,6 +42,15 @@
     .muted{color:var(--muted)}
     .category{font-weight:800;letter-spacing:.3px;color:#9ce6b2;margin:8px 2px}
     .footer{margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    /* 🔧 Remove up/down arrows from number inputs */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield; /* For Firefox */
+}
   </style>
 </head>
 <body>
