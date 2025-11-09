@@ -6,13 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { font-family: system-ui, sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; background: #0b1220; color: #e5e7eb; }
-    .card { background: #111827; padding: 28px; border-radius: 14px; width: min(520px, 92vw); box-shadow: 0 10px 30px #0007; }
+    .card { background: #111827; padding: 28px; border-radius: 14px; width: min(620px, 92vw); box-shadow: 0 10px 30px #0007; }
     h1 { margin: 0 0 8px; }
     button { cursor: pointer; padding: 10px 14px; border: 0; border-radius: 10px; font-weight: 600; }
     .primary { background: #22c55e; color: #062b12; }
     .muted { background: #1f2937; color: #cbd5e1; }
     .row { display: flex; gap: 10px; margin-top: 14px; }
     code { background:#0f172a; padding:2px 6px; border-radius:6px; }
+    pre { background:#0f172a; padding:10px; border-radius:8px; overflow:auto; max-height:220px; }
   </style>
 </head>
 <body>
@@ -26,84 +27,106 @@
     <p style="margin-top:12px; font-size:14px; opacity:.9;">
       After you log in the first time, we’ll create your profile automatically.
     </p>
+    <div style="margin-top:14px;">
+      <strong>Debug:</strong>
+      <pre id="debug"></pre>
+    </div>
   </div>
 
   <!-- Supabase JS (CDN) -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script>
-    // 1) Replace these two with your values from Supabase → Project Settings → API
+    // 🔧 Replace with your real values (Project Settings → API)
     const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
 
-    // 2) Init client
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const statusEl = document.getElementById('status');
     const actionsEl = document.getElementById('actions');
     const loginBtn = document.getElementById('login');
     const logoutBtn = document.getElementById('logout');
+    const debugEl = document.getElementById('debug');
 
-    // 3) Complete OAuth code exchange (Discord -> Supabase -> back to this page)
-    (async () => {
+    const log = (obj) => {
       try {
-        const url = new URL(window.location.href);
-        const hasCode = url.searchParams.get('code');
-        if (hasCode) {
-          const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-          if (error) {
-            console.error("exchangeCodeForSession error:", error);
-            statusEl.textContent = "Login failed: " + error.message;
-          } else {
-            // Clean the URL (remove ?code=...) and stay on same page
-            history.replaceState({}, "", window.location.origin + "/Green-Wonderland/");
-          }
-        }
-
-        // 4) Session check on load
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error("getSession error:", error);
-          statusEl.textContent = "Session check failed: " + error.message;
-          actionsEl.style.display = 'flex';
-          logoutBtn.style.display = 'none';
-          return;
-        }
-
-        if (session?.user) {
-          statusEl.textContent = `Logged in as ${session.user.user_metadata?.name || session.user.email || session.user.id}`;
-          actionsEl.style.display = 'flex';
-          loginBtn.style.display = 'none';
-        } else {
-          statusEl.textContent = "You are not logged in.";
-          actionsEl.style.display = 'flex';
-          logoutBtn.style.display = 'none';
-        }
+        debugEl.textContent += (typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2)) + "\n";
+        console.log(obj);
       } catch (e) {
-        console.error("Init error:", e);
-        statusEl.textContent = "Init error: " + e.message;
+        console.log(obj);
+      }
+    };
+
+    // Build our expected base path EXACTLY as deployed on GitHub Pages
+    const BASE_PATH = "/Green-Wonderland/"; // must match repo name & case
+    const BASE_URL  = window.location.origin + BASE_PATH;
+
+    (async () => {
+      log({ SUPABASE_URL, ANON_KEY_STARTS_WITH: SUPABASE_ANON_KEY.slice(0, 12) + "..." });
+      log({ origin: window.location.origin, pathname: window.location.pathname, href: window.location.href });
+
+      // 1) If we just returned from Discord, exchange the code for a session
+      const url = new URL(window.location.href);
+      const hasCode = url.searchParams.get('code');
+      const hasError = url.searchParams.get('error_description');
+
+      if (hasError) {
+        statusEl.textContent = "OAuth error: " + hasError;
+        log("OAuth error_description: " + hasError);
+      }
+
+      if (hasCode) {
+        log("Detected code param. Exchanging for session…");
+        const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        if (error) {
+          statusEl.textContent = "Login failed: " + error.message;
+          log({ exchange_error: error });
+        } else {
+          log({ exchange_ok: true, data });
+          // Clean the URL to the proper base path (handles GitHub Pages subpath)
+          history.replaceState({}, "", BASE_URL);
+        }
+      }
+
+      // 2) Check current session
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        statusEl.textContent = "Session check failed: " + error.message;
+        log({ getSession_error: error });
+        actionsEl.style.display = 'flex';
+        logoutBtn.style.display = 'none';
+        return;
+      }
+
+      if (session?.user) {
+        const name = session.user.user_metadata?.name || session.user.email || session.user.id;
+        statusEl.textContent = `Logged in as ${name}`;
+        log({ session_user: session.user });
+        actionsEl.style.display = 'flex';
+        loginBtn.style.display = 'none';
+      } else {
+        statusEl.textContent = "You are not logged in.";
+        actionsEl.style.display = 'flex';
+        logoutBtn.style.display = 'none';
       }
     })();
 
-    // 5) Login with Discord
+    // 3) Login with Discord (let Supabase use Site URL from settings)
     loginBtn?.addEventListener('click', async () => {
-      // You can omit redirectTo and Supabase will use your Site URL,
-      // but keeping it explicit is fine:
-      const redirectTo = "https://itachiwho.github.io/Green-Wonderland/"; // must match your Site URL exactly
-      await supabase.auth.signInWithOAuth({
-        provider: 'discord',
-        options: { redirectTo }
-      });
+      log("Starting Discord OAuth…");
+      const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'discord' });
+      if (error) {
+        alert("OAuth error: " + error.message);
+        log({ oauth_error: error });
+      } else {
+        log({ oauth_started: data });
+      }
     });
 
-    // 6) Logout
+    // 4) Logout
     logoutBtn?.addEventListener('click', async () => {
       await supabase.auth.signOut();
       location.reload();
-    });
-
-    // 7) React to auth state changes (placeholder for later)
-    supabase.auth.onAuthStateChange((_event, _session) => {
-      // route guards, etc., can go here later
     });
   </script>
 </body>
