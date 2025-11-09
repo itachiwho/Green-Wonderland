@@ -226,49 +226,60 @@ input[type=number] {
       saveBtn.disabled = cart.size===0 || total<=0;
     }
 
-    clearBtn.addEventListener('click', ()=>{ cart.clear(); render(); });
+    clearBtn.addEventListener('click', () => {
+  cart.clear();
+  discountEl.value = 0;
+  render();
+  renderItems(); // ✅ refresh the item list and reset all quantity boxes
+    });
     discountEl.addEventListener('input', render);
 
-    saveBtn.addEventListener('click', async ()=>{
-      const { subtotal, discount, total } = sums();
-      if (cart.size===0){ return; }
-      saveBtn.disabled = true; statusBadge.style.display='inline-block'; statusBadge.textContent='Saving…';
-      try{
-        // 1) Insert sale
-        const { data: saleRow, error: saleErr } = await supabase
-          .from('sales')
-          .insert([{ employee_id: session.user.id, subtotal, discount, total }])
-          .select('id')
-          .single();
-        if (saleErr) throw saleErr;
+    saveBtn.addEventListener('click', async () => {
+  const { subtotal, discount, total } = sums();
+  if (cart.size === 0) { return; }
+  saveBtn.disabled = true;
+  statusBadge.style.display = 'inline-block';
+  statusBadge.textContent = 'Saving…';
 
-        const sale_id = saleRow.id;
-        // 2) Build line items
-        const lines = [];
-        for (const [item_id, {qty, price}] of cart.entries()){
-          lines.push({ sale_id, item_id, qty, unit_price: price, line_total: qty*price });
-        }
-        // 3) Insert sale_items
-        const { error: liErr } = await supabase.from('sale_items').insert(lines);
-        if (liErr) throw liErr;
+  try {
+    // 1) Insert sale
+    const { data: saleRow, error: saleErr } = await supabase
+      .from('sales')
+      .insert([{ employee_id: session.user.id, subtotal, discount, total }])
+      .select('id')
+      .single();
+    if (saleErr) throw saleErr;
 
-        // Success UI
-        statusBadge.textContent = 'Saved!';
-        statusBadge.style.background = '#064e3b';
-        statusBadge.style.color = '#bbf7d0';
-        cart.clear();
-        discountEl.value = 0;
-        render();
-      }catch(e){
-        console.error(e);
-        statusBadge.textContent = 'Error';
-        statusBadge.style.background = '#3f1d1d';
-        statusBadge.style.color = '#fecaca';
-        alert('Save failed: '+ (e?.message||e));
-      }finally{
-        setTimeout(()=>{ statusBadge.style.display='none'; saveBtn.disabled=false; }, 1500);
-      }
-    });
+    const sale_id = saleRow.id;
+
+    // 2) Build line items
+    const lines = [];
+    for (const [item_id, { qty, price }] of cart.entries()) {
+      lines.push({ sale_id, item_id, qty, unit_price: price, line_total: qty * price });
+    }
+
+    // 3) Insert sale_items
+    const { error: liErr } = await supabase.from('sale_items').insert(lines);
+    if (liErr) throw liErr;
+
+    // ✅ Success UI + reset everything
+    statusBadge.textContent = 'Saved!';
+    statusBadge.style.background = '#064e3b';
+    statusBadge.style.color = '#bbf7d0';
+    cart.clear();
+    discountEl.value = 0;
+    render();
+    renderItems(); // ✅ reset all quantity inputs after save
+  } catch (e) {
+    console.error(e);
+    statusBadge.textContent = 'Error';
+    statusBadge.style.background = '#3f1d1d';
+    statusBadge.style.color = '#fecaca';
+    alert('Save failed: ' + (e?.message || e));
+  } finally {
+    setTimeout(() => { statusBadge.style.display = 'none'; saveBtn.disabled = false; }, 1500);
+  }
+});
   </script>
 </body>
 </html>
