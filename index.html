@@ -153,7 +153,7 @@
   const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
 
-  // Build BASE_URL dynamically to avoid path mismatches
+  // Build BASE_URL dynamically (works locally and on GitHub Pages)
   const REPO = "Green-Wonderland";
   const hasRepo = window.location.pathname.includes(`/${REPO}/`);
   const BASE_PATH = hasRepo ? `/${REPO}/` : "/";
@@ -161,7 +161,7 @@
 
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // ====== Auth (login + session) ======
+  // DOM refs
   const loginStage = document.getElementById('loginStage');
   const loginBtn   = document.getElementById('loginBtn');
   const logoutBtn  = document.getElementById('logoutBtn');
@@ -169,66 +169,93 @@
   const who        = document.getElementById('who');
   const appShell   = document.getElementById('appShell');
 
-  // Show helpful errors if Discord sends them
+  function show(msg){
+    if (statusEl) statusEl.textContent = msg;
+    console.log("[auth]", msg);
+  }
+
   function showUrlErrors() {
     const u = new URL(window.location.href);
     const err = u.searchParams.get("error_description") || u.searchParams.get("error");
-    if (err) statusEl.textContent = `OAuth error: ${decodeURIComponent(err)}`;
+    if (err) show(`OAuth error: ${decodeURIComponent(err)}`);
   }
 
   async function handleOAuthReturn() {
     const href = window.location.href;
     const url  = new URL(href);
+
     if (url.searchParams.get("code")) {
-      // Code flow
+      show("Exchanging code for session…");
       const { error } = await supabase.auth.exchangeCodeForSession(href);
-      // Clean the URL either way
+      // Clean the URL (remove ?code=…)
       history.replaceState({}, "", BASE_URL);
-      if (error) statusEl.textContent = "Login failed. " + (error.message || "");
-    } else if (href.includes("#access_token=")) {
-      // Legacy implicit flow
-      history.replaceState({}, "", BASE_URL);
+      if (error) {
+        show("Login failed: " + (error.message || "exchangeCodeForSession error"));
+        return false;
+      }
+      show("Code exchange OK.");
+      return true;
     }
+
+    // Legacy hash flow: clean it if present
+    if (href.includes("#access_token=")) {
+      history.replaceState({}, "", BASE_URL);
+      show("Cleaned legacy hash from URL.");
+    }
+    return false;
   }
 
   async function boot() {
     showUrlErrors();
-    await handleOAuthReturn();
 
-    // 1) Check existing session
+    const didExchange = await handleOAuthReturn();
+
+    // Always check the session after handling return
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error) {
-      statusEl.textContent = "Session check failed: " + error.message;
-      document.getElementById('loginActions').style.display = 'flex';
+      show("Session check failed: " + error.message);
+      document.getElementById('loginActions')?.style?.setProperty('display','flex');
       return;
     }
     if (session?.user) {
+      show("Session found; entering app…");
       showApp(session);
-    } else {
-      statusEl.textContent = "You are not logged in.";
-      document.getElementById('loginActions').style.display = 'flex';
+      return;
     }
+
+    // If we just exchanged but no session, warn clearly
+    if (didExchange) {
+      show("Code exchanged, but no session received. Double-check Supabase Auth URL settings and Discord redirect.");
+    } else {
+      show("You are not logged in.");
+    }
+    document.getElementById('loginActions')?.style?.setProperty('display','flex');
   }
 
-  // 2) React if Supabase signs us in (extra safety)
+  // If session appears slightly later, still enter app
   supabase.auth.onAuthStateChange((event, session) => {
+    console.log("[auth state]", event, session?.user?.id);
     if (event === "SIGNED_IN" && session?.user) {
+      show("Signed in via auth state.");
       showApp(session);
     }
     if (event === "SIGNED_OUT") {
       loginStage.style.display = '';
       appShell.style.display = 'none';
+      show("Signed out.");
     }
   });
 
   loginBtn?.addEventListener('click', async () => {
-    await supabase.auth.signInWithOAuth({
+    show("Redirecting to Discord…");
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'discord',
       options: {
-        redirectTo: BASE_URL,   // MUST match Discord + Supabase config
-        scopes: 'identify'      // no email
+        redirectTo: BASE_URL,  // MUST match Supabase Site URL + Redirect URL
+        scopes: 'identify'     // no email
       }
     });
+    if (error) show("OAuth start failed: " + error.message);
   });
 
   logoutBtn?.addEventListener('click', async () => {
@@ -241,17 +268,14 @@
     who.textContent = `Signed in as ${meta.name || meta.full_name || 'Employee'}`;
     loginStage.style.display = 'none';
     appShell.style.display = '';
-    // Init your tabs + panels (these functions already exist in your SPA)
+    // Your existing init calls:
     await initTabs();
     await billingInit(session);
     await historyInit(session);
     await revenueInit(session);
   }
 
-  // ====== the rest of your SPA code stays the same ======
-  // (tabs, billing, history, revenue implementations)
-
-  // Kick off
+  // Kick off auth
   boot();
 </script>
 </body>
