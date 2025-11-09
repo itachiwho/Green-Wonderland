@@ -33,7 +33,7 @@
   <script>
     // 1) Replace these two with your values from Supabase → Project Settings → API
     const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4ZGRtb2locWRodmJxZGhycXloIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NDE0MjksImV4cCI6MjA3ODIxNzQyOX0.0IvlzHHCJ5kGlLJynGmePhq0AXkBsIXShLsX2L_ZZcY";
+    const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
 
     // 2) Init client
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -43,39 +43,67 @@
     const loginBtn = document.getElementById('login');
     const logoutBtn = document.getElementById('logout');
 
-    // 3) Session check on load
+    // 3) Complete OAuth code exchange (Discord -> Supabase -> back to this page)
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      try {
+        const url = new URL(window.location.href);
+        const hasCode = url.searchParams.get('code');
+        if (hasCode) {
+          const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          if (error) {
+            console.error("exchangeCodeForSession error:", error);
+            statusEl.textContent = "Login failed: " + error.message;
+          } else {
+            // Clean the URL (remove ?code=...) and stay on same page
+            history.replaceState({}, "", window.location.origin + "/Green-Wonderland/");
+          }
+        }
 
-      if (session?.user) {
-        statusEl.textContent = `Logged in as ${session.user.user_metadata?.name || session.user.email || session.user.id}`;
-        actionsEl.style.display = 'flex';
-        loginBtn.style.display = 'none';
-      } else {
-        statusEl.textContent = "You are not logged in.";
-        actionsEl.style.display = 'flex';
-        logoutBtn.style.display = 'none';
+        // 4) Session check on load
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error("getSession error:", error);
+          statusEl.textContent = "Session check failed: " + error.message;
+          actionsEl.style.display = 'flex';
+          logoutBtn.style.display = 'none';
+          return;
+        }
+
+        if (session?.user) {
+          statusEl.textContent = `Logged in as ${session.user.user_metadata?.name || session.user.email || session.user.id}`;
+          actionsEl.style.display = 'flex';
+          loginBtn.style.display = 'none';
+        } else {
+          statusEl.textContent = "You are not logged in.";
+          actionsEl.style.display = 'flex';
+          logoutBtn.style.display = 'none';
+        }
+      } catch (e) {
+        console.error("Init error:", e);
+        statusEl.textContent = "Init error: " + e.message;
       }
     })();
 
-    // 4) Login with Discord
+    // 5) Login with Discord
     loginBtn?.addEventListener('click', async () => {
-      const redirectTo = "https://itachiwho.github.io/Green-Wonderland/"; // same as your Site URL
+      // You can omit redirectTo and Supabase will use your Site URL,
+      // but keeping it explicit is fine:
+      const redirectTo = "https://itachiwho.github.io/Green-Wonderland/"; // must match your Site URL exactly
       await supabase.auth.signInWithOAuth({
         provider: 'discord',
         options: { redirectTo }
       });
     });
 
-    // 5) Logout
+    // 6) Logout
     logoutBtn?.addEventListener('click', async () => {
       await supabase.auth.signOut();
       location.reload();
     });
 
-    // 6) React to auth state changes (if needed later)
+    // 7) React to auth state changes (placeholder for later)
     supabase.auth.onAuthStateChange((_event, _session) => {
-      // you can force a refresh or route guard here in future
+      // route guards, etc., can go here later
     });
   </script>
 </body>
