@@ -1,140 +1,543 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Green Wonderland • Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body { font-family: system-ui, sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; background: #0b1220; color: #e5e7eb; }
-    .card { background: #111827; padding: 28px; border-radius: 14px; width: min(620px, 92vw); box-shadow: 0 10px 30px #0007; }
-    h1 { margin: 0 0 8px; }
-    button { cursor: pointer; padding: 10px 14px; border: 0; border-radius: 10px; font-weight: 600; }
-    .primary { background: #22c55e; color: #062b12; }
-    .muted { background: #1f2937; color: #cbd5e1; }
-    .row { display: flex; gap: 10px; margin-top: 14px; }
-    pre { background:#0f172a; padding:10px; border-radius:8px; overflow:auto; max-height:220px; font-size:13px;}
-  </style>
+  <title>Green Wonderland • Portal</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <div class="card">
-    <h1>Green Wonderland Portal</h1>
-    <p id="status">Checking session…</p>
-    <div class="row" id="actions" style="display:none;">
-      <button class="primary" id="login">Login with Discord</button>
-      <button class="muted" id="logout">Logout</button>
-    </div>
-    <p style="margin-top:12px; font-size:14px; opacity:.9;">
-      After you log in the first time, we’ll create your profile automatically.
-    </p>
-    <div style="margin-top:14px;">
-      <strong>Debug:</strong>
-      <pre id="debug"></pre>
+  <!-- LOGIN CARD -->
+  <div class="center stage" id="loginStage" aria-hidden="false">
+    <div class="card">
+      <h1>🌿 Green Wonderland Portal</h1>
+      <p class="muted" id="status">Checking session…</p>
+      <div class="row gap" id="loginActions" style="display:none;">
+        <button class="btn btn-primary" id="loginBtn">Login with Discord</button>
+      </div>
+      <p class="hint">We never use email — Discord ID only.</p>
     </div>
   </div>
 
+  <!-- APP SHELL (shown after login) -->
+  <div id="appShell" class="container" style="display:none;">
+    <header class="topbar">
+      <div>
+        <div class="brand">🌿 Green Wonderland</div>
+        <div class="muted" id="who"></div>
+      </div>
+      <nav class="tabs">
+        <button class="tab active" data-panel="billing">Billing</button>
+        <button class="tab" data-panel="history">History</button>
+        <button class="tab" data-panel="revenue">Revenue</button>
+        <button class="btn btn-ghost" id="logoutBtn">Logout</button>
+      </nav>
+    </header>
+
+    <!-- BILLING PANEL -->
+    <section id="panel-billing" class="panel">
+      <div class="grid">
+        <div class="card sect">
+          <h3>Items</h3>
+          <p class="muted">Pick items and set quantities. Prices are RP dollars.</p>
+          <div id="items"></div>
+        </div>
+        <div class="card sect">
+          <h3>Cart</h3>
+          <div class="summary">
+            <div class="row between"><span class="muted">Subtotal</span><span id="subtotal">$0</span></div>
+            <div class="row between"><label class="muted" for="discount">Discount</label><input id="discount" type="number" min="0" value="0"/></div>
+            <div class="row between total"><span>Total</span><span id="total">$0</span></div>
+          </div>
+          <div class="footer">
+            <button id="clear" class="btn btn-ghost">Clear</button>
+            <button id="save" class="btn btn-primary" disabled>Save Sale</button>
+            <span id="statusBadge" class="badge" style="display:none"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY PANEL -->
+    <section id="panel-history" class="panel" hidden>
+      <div class="card">
+        <div class="filters">
+          <label>From <input type="date" id="hFrom"></label>
+          <label>To <input type="date" id="hTo"></label>
+          <label id="hWhoWrap" style="display:none;">Employee
+            <select id="hEmployee"></select>
+          </label>
+          <button id="hApply" class="btn btn-primary">Apply</button>
+          <button id="hExport" class="btn btn-ghost">Export .xlsx</button>
+        </div>
+        <div class="kpi three">
+          <div class="card kpiCard"><div class="muted">Subtotal</div><div id="hkSub" class="kpiVal">$0</div></div>
+          <div class="card kpiCard"><div class="muted">Discount</div><div id="hkDis" class="kpiVal">$0</div></div>
+          <div class="card kpiCard"><div class="muted">Total</div><div id="hkTot" class="kpiVal accent">$0</div></div>
+        </div>
+      </div>
+      <div class="card mt">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Employee</th>
+              <th>Sale #</th>
+              <th>Item</th>
+              <th class="right">Qty</th>
+              <th class="right">Unit</th>
+              <th class="right">Line Total</th>
+              <th class="right">Sale Total</th>
+            </tr>
+          </thead>
+          <tbody id="hRows"></tbody>
+        </table>
+        <div id="hEmpty" class="muted" style="display:none;margin:6px 2px;">No sales in this range.</div>
+      </div>
+    </section>
+
+    <!-- REVENUE PANEL -->
+    <section id="panel-revenue" class="panel" hidden>
+      <div class="card">
+        <div class="filters">
+          <label>From <input type="date" id="rFrom"></label>
+          <label>To <input type="date" id="rTo"></label>
+          <label>Bucket
+            <select id="rBucket">
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month" selected>Month</option>
+            </select>
+          </label>
+          <label id="rWhoWrap" style="display:none;">Employee
+            <select id="rEmployee"></select>
+          </label>
+          <button id="rApply" class="btn btn-primary">Apply</button>
+          <button id="rExport" class="btn btn-ghost">Export .xlsx</button>
+        </div>
+        <div class="kpi four">
+          <div class="card kpiCard"><div class="muted">Orders</div><div id="rkOrders" class="kpiVal">0</div></div>
+          <div class="card kpiCard"><div class="muted">Subtotal</div><div id="rkSub" class="kpiVal">$0</div></div>
+          <div class="card kpiCard"><div class="muted">Discount</div><div id="rkDis" class="kpiVal">$0</div></div>
+          <div class="card kpiCard"><div class="muted">Total</div><div id="rkTot" class="kpiVal accent">$0</div></div>
+        </div>
+      </div>
+      <div class="card mt">
+        <canvas id="revChart" height="260"></canvas>
+      </div>
+      <div class="card mt">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Bucket</th>
+              <th class="right">Orders</th>
+              <th class="right">Subtotal</th>
+              <th class="right">Discount</th>
+              <th class="right">Total</th>
+            </tr>
+          </thead>
+          <tbody id="rRows"></tbody>
+        </table>
+        <div id="rEmpty" class="muted" style="display:none;margin:6px 2px;">No sales in this range.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- libs -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
   <script>
-    // 🔧 Your project details
+    // 🔧 Project details
     const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
 
-    // GitHub Pages paths (must match repo name & case)
-    const BASE_PATH   = "/Green-Wonderland/";
-    const BASE_URL    = window.location.origin + BASE_PATH;              // e.g., .../Green-Wonderland/
-    const BILLING_URL = window.location.origin + BASE_PATH + "billing.html";
+    const BASE_PATH = "/Green-Wonderland/";               // must match repo
+    const BASE_URL  = window.location.origin + BASE_PATH;   // e.g., https://.../Green-Wonderland/
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // ====== Auth Flow (login + session) ======
+    const loginStage = document.getElementById('loginStage');
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
     const statusEl = document.getElementById('status');
-    const actionsEl = document.getElementById('actions');
-    const loginBtn = document.getElementById('login');
-    const logoutBtn = document.getElementById('logout');
-    const debugEl = document.getElementById('debug');
-
-    const log = (data) => {
-      try {
-        debugEl.textContent += (typeof data === "string" ? data : JSON.stringify(data, null, 2)) + "\n";
-      } catch {}
-      console.log(data);
-    };
+    const who = document.getElementById('who');
+    const appShell = document.getElementById('appShell');
 
     (async () => {
-      log({ SUPABASE_URL, keyPrefix: SUPABASE_ANON_KEY.slice(0, 10) + "..." });
-      log({ href: window.location.href });
-
-      // Handle OAuth return: code flow or (older) hash tokens
+      // Handle OAuth code return & clean URL
       const href = window.location.href;
       const url = new URL(href);
-      const hasCode = url.searchParams.get("code");
-      const errDesc = url.searchParams.get("error_description");
-
-      if (errDesc) {
-        statusEl.textContent = "OAuth error: " + errDesc;
-        log("OAuth error_description: " + errDesc);
-      }
-
+      const hasCode = url.searchParams.get('code');
       if (hasCode) {
-        log("Detected code param; exchanging for session…");
         const { error } = await supabase.auth.exchangeCodeForSession(href);
-        // Clean URL either way
-        history.replaceState({}, "", BASE_URL);
-        if (error) {
-          statusEl.textContent = "Login failed: " + error.message;
-          log({ exchange_error: error });
-        } else {
-          // ✅ Go straight to Billing after successful login
-          window.location.href = BILLING_URL;
-          return;
-        }
-      } else if (href.includes("#access_token=")) {
-        // Clean legacy implicit hash and go to Billing
-        history.replaceState({}, "", BASE_URL);
-        window.location.href = BILLING_URL;
-        return;
+        history.replaceState({}, '', BASE_URL);
+        if (error) statusEl.textContent = 'Login failed.';
+      } else if (href.includes('#access_token=')) {
+        history.replaceState({}, '', BASE_URL);
       }
 
-      // Check existing session
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        statusEl.textContent = "Session check failed: " + error.message;
-        log({ getSession_error: error });
-        actionsEl.style.display = "flex";
-        logoutBtn.style.display = "none";
-        return;
-      }
-
+      // Session check
+      const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // ✅ Already logged in → go to Billing
-        window.location.href = BILLING_URL;
-        return;
+        showApp(session);
       } else {
-        statusEl.textContent = "You are not logged in.";
-        actionsEl.style.display = "flex";
-        logoutBtn.style.display = "none";
+        statusEl.textContent = 'You are not logged in.';
+        document.getElementById('loginActions').style.display = 'flex';
       }
     })();
 
-    // Step 3: Login with Discord (only 'identify' scope, no email)
-    loginBtn?.addEventListener("click", async () => {
-      log("Starting Discord OAuth with redirectTo=" + BASE_URL);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "discord",
-        options: {
-          redirectTo: BASE_URL,
-          scopes: "identify"   // request no email scope
-        }
+    loginBtn?.addEventListener('click', async () => {
+      await supabase.auth.signInWithOAuth({
+        provider: 'discord',
+        options: { redirectTo: BASE_URL, scopes: 'identify' } // no email
       });
-      if (error) {
-        alert("OAuth error: " + error.message);
-        log({ oauth_error: error });
-      }
     });
 
-    // Step 4: Logout
-    logoutBtn?.addEventListener("click", async () => {
+    logoutBtn?.addEventListener('click', async () => {
       await supabase.auth.signOut();
-      location.reload();
+      location.href = BASE_URL;
     });
+
+    async function showApp(session){
+      const meta = session.user.user_metadata || {};
+      who.textContent = `Signed in as ${meta.name || meta.full_name || 'Employee'}`;
+      loginStage.style.display = 'none';
+      appShell.style.display = '';
+      await initTabs();
+      await billingInit(session);
+      await historyInit(session);
+      await revenueInit(session);
+    }
+
+    // ====== Tabs ======
+    async function initTabs(){
+      const tabs = document.querySelectorAll('.tab');
+      const panels = {
+        billing: document.getElementById('panel-billing'),
+        history: document.getElementById('panel-history'),
+        revenue: document.getElementById('panel-revenue'),
+      };
+      tabs.forEach(btn => btn.addEventListener('click', () => {
+        tabs.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const id = btn.dataset.panel;
+        Object.entries(panels).forEach(([k, el]) => el.hidden = k !== id);
+      }));
+    }
+
+    // ====== BILLING ======
+    const itemsEl = document.getElementById('items');
+    const subtotalEl = document.getElementById('subtotal');
+    const totalEl = document.getElementById('total');
+    const discountEl = document.getElementById('discount');
+    const saveBtn = document.getElementById('save');
+    const clearBtn = document.getElementById('clear');
+    const statusBadge = document.getElementById('statusBadge');
+
+    let catalog = [];
+    const cart = new Map(); // item_id -> {qty, price, name}
+
+    async function billingInit(session){
+      await loadItems();
+      renderCart();
+      clearBtn.addEventListener('click', () => {
+        cart.clear();
+        discountEl.value = 0;
+        renderCart();
+        renderItems();
+      });
+      discountEl.addEventListener('input', renderCart);
+      saveBtn.addEventListener('click', () => saveSale(session));
+    }
+
+    async function loadItems(){
+      const { data, error } = await supabase
+        .from('items')
+        .select('id, category, name, base_price, is_active')
+        .eq('is_active', true)
+        .order('category', { ascending:true })
+        .order('id', { ascending:true });
+      if (error) { console.error(error); alert('Failed to load items'); return; }
+      catalog = data || [];
+      renderItems();
+    }
+
+    function money(n){ return `$${Math.max(0, Math.round(n||0))}`; }
+
+    function renderItems(){
+      // group by category
+      const byCat = {};
+      catalog.forEach(it => { (byCat[it.category] ||= []).push(it); });
+      const frag = document.createDocumentFragment();
+      for (const [cat, arr] of Object.entries(byCat)){
+        const catTitle = document.createElement('div');
+        catTitle.className = 'category';
+        catTitle.textContent = cat;
+        frag.appendChild(catTitle);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'items';
+        for (const it of arr){
+          const pill = document.createElement('div'); pill.className = 'pill';
+          const left = document.createElement('div');
+          left.innerHTML = `<div class="title">${it.name}</div><div class="price">${money(it.base_price)}</div>`;
+
+          const q = document.createElement('div'); q.className = 'qty';
+          const minus = document.createElement('button'); minus.textContent = '−';
+          const input = document.createElement('input'); input.type='number'; input.min='0'; input.value = cart.get(it.id)?.qty || 0;
+          const plus = document.createElement('button'); plus.textContent = '+';
+
+          minus.addEventListener('click', () => {
+            const current = parseInt(input.value || '0', 10) || 0;
+            const newQty = Math.max(0, current - 1);
+            setQty(it, newQty); input.value = newQty;
+          });
+          plus.addEventListener('click', () => {
+            const current = parseInt(input.value || '0', 10) || 0;
+            const newQty = current + 1;
+            setQty(it, newQty); input.value = newQty;
+          });
+          input.addEventListener('input', () => {
+            const val = Math.max(0, parseInt(input.value || '0', 10) || 0);
+            setQty(it, val); input.value = val;
+          });
+
+          q.append(minus,input,plus);
+          pill.append(left,q);
+          wrap.appendChild(pill);
+        }
+        frag.appendChild(wrap);
+      }
+      itemsEl.innerHTML = '';
+      itemsEl.appendChild(frag);
+    }
+
+    function setQty(item, qty){
+      qty = Number.isFinite(qty) && qty>0 ? qty : 0;
+      if (qty===0) cart.delete(item.id);
+      else cart.set(item.id, { qty, price:item.base_price, name:item.name });
+      renderCart();
+    }
+
+    function calc(){
+      let subtotal = 0; for (const {qty, price} of cart.values()) subtotal += qty*price;
+      const discount = Math.max(0, Math.round(parseInt(discountEl.value||'0',10)));
+      const total = Math.max(0, subtotal - discount);
+      return { subtotal, discount, total };
+    }
+
+    function renderCart(){
+      const { subtotal, total } = calc();
+      subtotalEl.textContent = money(subtotal);
+      totalEl.textContent = money(total);
+      saveBtn.disabled = cart.size===0 || total<=0;
+    }
+
+    async function saveSale(session){
+      const { subtotal, discount, total } = calc();
+      if (cart.size===0) return;
+      saveBtn.disabled = true; statusBadge.style.display='inline-block'; statusBadge.textContent='Saving…';
+      try{
+        const { data: saleRow, error: saleErr } = await supabase
+          .from('sales')
+          .insert([{ employee_id: session.user.id, subtotal, discount, total }])
+          .select('id')
+          .single();
+        if (saleErr) throw saleErr;
+        const sale_id = saleRow.id;
+        const lines = [];
+        for (const [item_id, {qty, price}] of cart.entries()){
+          lines.push({ sale_id, item_id, qty, unit_price: price, line_total: qty*price });
+        }
+        const { error: liErr } = await supabase.from('sale_items').insert(lines);
+        if (liErr) throw liErr;
+        statusBadge.textContent = 'Saved!';
+        statusBadge.style.background = '#064e3b';
+        statusBadge.style.color = '#bbf7d0';
+        cart.clear(); discountEl.value = 0; renderCart(); renderItems();
+      }catch(e){
+        console.error(e);
+        statusBadge.textContent = 'Error';
+        statusBadge.style.background = '#3f1d1d';
+        statusBadge.style.color = '#fecaca';
+        alert('Save failed: '+ (e?.message||e));
+      }finally{
+        setTimeout(()=>{ statusBadge.style.display='none'; saveBtn.disabled=false; }, 1200);
+      }
+    }
+
+    // ====== HISTORY ======
+    const hFrom = document.getElementById('hFrom');
+    const hTo = document.getElementById('hTo');
+    const hWhoWrap = document.getElementById('hWhoWrap');
+    const hEmployee = document.getElementById('hEmployee');
+    const hApply = document.getElementById('hApply');
+    const hExport = document.getElementById('hExport');
+    const hRows = document.getElementById('hRows');
+    const hEmpty = document.getElementById('hEmpty');
+    const hkSub = document.getElementById('hkSub');
+    const hkDis = document.getElementById('hkDis');
+    const hkTot = document.getElementById('hkTot');
+
+    let isAdmin = false;
+    let itemsById = new Map();
+
+    async function historyInit(session){
+      // admin?
+      try { const { data: ok } = await supabase.rpc('is_admin', { uid: session.user.id }); isAdmin = !!ok; } catch(e){ isAdmin = false; }
+      if (isAdmin) { hWhoWrap.style.display = ''; await loadEmployeesForHistory(); }
+      await preloadItemNames();
+      // default = current month
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth()+1, 0);
+      hFrom.valueAsDate = start; hTo.valueAsDate = end;
+      hApply.addEventListener('click', () => loadHistory(session));
+      hExport.addEventListener('click', exportHistoryXLSX);
+      await loadHistory(session);
+    }
+
+    async function preloadItemNames(){
+      const { data } = await supabase.from('items').select('id,name');
+      itemsById = new Map((data||[]).map(i => [i.id, i.name]));
+    }
+
+    async function loadEmployeesForHistory(){
+      const { data } = await supabase.from('profiles').select('id,name').order('name',{ascending:true});
+      hEmployee.innerHTML = '<option value="">All employees</option>' +
+        (data||[]).map(e => `<option value="${e.id}">${(e.name||e.id).replaceAll('<','&lt;')}</option>`).join('');
+    }
+
+    async function loadHistory(session){
+      hRows.innerHTML = ''; hEmpty.style.display = 'none';
+      const from = hFrom.value ? new Date(hFrom.value) : null;
+      const to = hTo.value ? new Date(hTo.value) : null; if (to) to.setHours(23,59,59,999);
+      let q = supabase.from('sales').select('id, employee_id, subtotal, discount, total, created_at').order('created_at',{ascending:false});
+      if (from) q = q.gte('created_at', from.toISOString());
+      if (to)   q = q.lte('created_at', to.toISOString());
+      if (isAdmin && hEmployee.value) q = q.eq('employee_id', hEmployee.value);
+      const { data: sales, error } = await q;
+      if (error) { console.error(error); alert('Failed to load sales'); return; }
+      if (!sales || sales.length === 0) { hEmpty.style.display = ''; setHKPIs([]); return; }
+      const ids = sales.map(s => s.id);
+      const { data: lines } = await supabase.from('sale_items').select('sale_id,item_id,qty,unit_price,line_total').in('sale_id', ids);
+      // names
+      let names = new Map();
+      if (isAdmin){
+        const uids = [...new Set(sales.map(s => s.employee_id))];
+        if (uids.length){ const { data: profs } = await supabase.from('profiles').select('id,name').in('id', uids); (profs||[]).forEach(p=>names.set(p.id, p.name||p.id)); }
+      } else {
+        const meta = session.user.user_metadata || {}; names.set(session.user.id, meta.name || meta.full_name || 'Me');
+      }
+      const bySale = new Map(); (lines||[]).forEach(li => { if (!bySale.has(li.sale_id)) bySale.set(li.sale_id, []); bySale.get(li.sale_id).push(li); });
+      const frag = document.createDocumentFragment();
+      sales.forEach(s => {
+        const rows = bySale.get(s.id) || [];
+        rows.forEach((li, idx) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${new Date(s.created_at).toLocaleString()}</td>
+            <td>${isAdmin ? (names.get(s.employee_id)||s.employee_id) : '—'}</td>
+            <td>${s.id}</td>
+            <td>${itemsById.get(li.item_id)||li.item_id}</td>
+            <td class="right">${li.qty}</td>
+            <td class="right">${money(li.unit_price)}</td>
+            <td class="right">${money(li.line_total)}</td>
+            <td class="right">${idx===0 ? money(s.total) : ''}</td>`;
+          frag.appendChild(tr);
+        });
+      });
+      hRows.appendChild(frag);
+      setHKPIs(sales);
+    }
+
+    function setHKPIs(sales){
+      const subtotal = sales.reduce((a,s)=>a+(s.subtotal||0),0);
+      const discount = sales.reduce((a,s)=>a+(s.discount||0),0);
+      const total = sales.reduce((a,s)=>a+(s.total||0),0);
+      hkSub.textContent = money(subtotal); hkDis.textContent = money(discount); hkTot.textContent = money(total);
+    }
+
+    function exportHistoryXLSX(){
+      const table = [];
+      document.querySelectorAll('#hRows tr').forEach(tr => {
+        const t = tr.querySelectorAll('td');
+        table.push({
+          Date: t[0]?.textContent||'',
+          Employee: t[1]?.textContent||'',
+          SaleID: t[2]?.textContent||'',
+          Item: t[3]?.textContent||'',
+          Qty: t[4]?.textContent||'',
+          Unit: t[5]?.textContent||'',
+          LineTotal: t[6]?.textContent||'',
+          SaleTotal: t[7]?.textContent||''
+        });
+      });
+      const ws = XLSX.utils.json_to_sheet(table); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Sales');
+      const now = new Date(); const fname = `GW_Sales_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.xlsx`;
+      XLSX.writeFile(wb, fname);
+    }
+
+    // ====== REVENUE ======
+    let revChart = null;
+    const rFrom = document.getElementById('rFrom');
+    const rTo = document.getElementById('rTo');
+    const rBucket = document.getElementById('rBucket');
+    const rWhoWrap = document.getElementById('rWhoWrap');
+    const rEmployee = document.getElementById('rEmployee');
+    const rApply = document.getElementById('rApply');
+    const rExport = document.getElementById('rExport');
+    const rRows = document.getElementById('rRows');
+    const rEmpty = document.getElementById('rEmpty');
+    const rkOrders = document.getElementById('rkOrders');
+    const rkSub = document.getElementById('rkSub');
+    const rkDis = document.getElementById('rkDis');
+    const rkTot = document.getElementById('rkTot');
+
+    async function revenueInit(session){
+      try { const { data: ok } = await supabase.rpc('is_admin', { uid: session.user.id }); if (ok) rWhoWrap.style.display=''; } catch(e){}
+      const now = new Date(); const start = new Date(now.getFullYear(), now.getMonth(), 1); const end = new Date(now.getFullYear(), now.getMonth()+1, 0);
+      rFrom.valueAsDate = start; rTo.valueAsDate = end; rBucket.value = 'month';
+      rApply.addEventListener('click', () => loadRevenue(session));
+      rExport.addEventListener('click', exportRevenueXLSX);
+      await loadRevenue(session);
+    }
+
+    async function loadRevenue(session){
+      rRows.innerHTML = ''; rEmpty.style.display = 'none';
+      const from = rFrom.value ? new Date(rFrom.value) : null;
+      const to = rTo.value ? new Date(rTo.value) : null; if (to) to.setHours(23,59,59,999);
+      let q = supabase.from('sales').select('id, employee_id, subtotal, discount, total, created_at').order('created_at',{ascending:true});
+      if (from) q = q.gte('created_at', from.toISOString());
+      if (to)   q = q.lte('created_at', to.toISOString());
+      if (rEmployee.value) q = q.eq('employee_id', rEmployee.value);
+      const { data: sales, error } = await q; if (error) { console.error(error); alert('Failed to load sales'); return; }
+      if (!sales || sales.length===0){ rEmpty.style.display=''; setRevKPIs([]); drawRevenue([],[]); return; }
+
+      const bucket = rBucket.value;
+      const grouped = new Map();
+      const keyOf = (iso) => { const dt = new Date(iso); if (bucket==='day') return dt.toISOString().slice(0,10); if (bucket==='week'){ const t = new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate())); const d=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()-d+1); return t.toISOString().slice(0,10)+' (wk)'; } return dt.getFullYear()+ '-' + String(dt.getMonth()+1).padStart(2,'0'); };
+      for (const s of sales){ const k = keyOf(s.created_at); const g = grouped.get(k)||{orders:0,subtotal:0,discount:0,total:0}; g.orders++; g.subtotal+=s.subtotal||0; g.discount+=s.discount||0; g.total+=s.total||0; grouped.set(k,g); }
+
+      const labels=[]; const totals=[]; const frag = document.createDocumentFragment();
+      [...grouped.entries()].sort(([a],[b]) => a.localeCompare(b)).forEach(([k,g]) => {
+        labels.push(k); totals.push(g.total);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${k}</td><td class="right">${g.orders}</td><td class="right">$${Math.round(g.subtotal)}</td><td class="right">$${Math.round(g.discount)}</td><td class="right">$${Math.round(g.total)}</td>`;
+        frag.appendChild(tr);
+      });
+      rRows.appendChild(frag);
+      setRevKPIs(sales); drawRevenue(labels, totals);
+    }
+
+    function setRevKPIs(sales){ const o=sales.length; const s=sales.reduce((a,x)=>a+(x.subtotal||0),0); const d=sales.reduce((a,x)=>a+(x.discount||0),0); const t=sales.reduce((a,x)=>a+(x.total||0),0); rkOrders.textContent=o; rkSub.textContent=`$${Math.round(s)}`; rkDis.textContent=`$${Math.round(d)}`; rkTot.textContent=`$${Math.round(t)}`; }
+
+    function drawRevenue(labels, data){ const ctx=document.getElementById('revChart'); if (window.revChart) window.revChart.destroy(); window.revChart=new Chart(ctx,{ type:'line', data:{ labels, datasets:[{ label:'Revenue', data, tension:0.3 }] }, options:{ plugins:{ legend:{ display:false } }, scales:{ x:{ ticks:{ color:'#cbd5e1'}}, y:{ ticks:{ color:'#cbd5e1'}}}}}); }
+
+    function exportRevenueXLSX(){ const table=[]; document.querySelectorAll('#rRows tr').forEach(tr=>{ const t=tr.querySelectorAll('td'); table.push({ Bucket:t[0]?.textContent||'', Orders:t[1]?.textContent||'', Subtotal:t[2]?.textContent||'', Discount:t[3]?.textContent||'', Total:t[4]?.textContent||'' });}); const ws=XLSX.utils.json_to_sheet(table); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Revenue'); const now=new Date(); const fname=`GW_Revenue_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.xlsx`; XLSX.writeFile(wb,fname); }
   </script>
 </body>
 </html>
