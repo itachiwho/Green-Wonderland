@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Green Wonderland • Billing</title>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#0f172a; --ink:#e5e7eb; --muted:#94a3b8; --accent:#22c55e; --accent-2:#16a34a; --danger:#ef4444;
+      --ring:#22c55e55;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--ink)}
+    a{color:inherit}
+    .container{max-width:1100px;margin-inline:auto;padding:20px}
+    .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .badge{background:#172033;color:#a3e635;padding:6px 10px;border-radius:999px;font-weight:600;font-size:13px}
+    .btn{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-weight:700}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .btn-primary{background:var(--accent);color:#062b12}
+    .btn-ghost{background:#1f2937;color:#cbd5e1}
+    .grid{display:grid;gap:14px}
+    @media (min-width:1000px){.grid{grid-template-columns:2fr 1fr}}
+    .card{background:var(--panel);border:1px solid #1e293b;border-radius:16px;box-shadow:0 10px 30px #0006}
+    .card h3{margin:0 0 8px}
+    .sect{padding:16px}
+    .items{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+    .pill{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#0c1424;border:1px solid #1e293b;border-radius:14px;padding:10px}
+    .title{font-weight:600}
+    .price{color:#a7f3d0;font-weight:700}
+    .qty{display:flex;align-items:center;gap:8px}
+    .qty input{width:46px;background:#0b1220;border:1px solid #243042;color:var(--ink);padding:6px;border-radius:8px;text-align:center}
+    .qty button{width:32px;height:32px;border-radius:8px;border:1px solid #263042;background:#0c1424;color:#cbd5e1;cursor:pointer}
+    .qty button:active{transform:translateY(1px)}
+    .group{border-top:1px dashed #263042;margin-top:8px;padding-top:8px}
+    .summary{display:grid;gap:8px}
+    .row{display:flex;justify-content:space-between;align-items:center}
+    .total{font-size:22px;font-weight:800;color:#bbf7d0}
+    input[type="number"]{background:#0b1220;color:#e2e8f0;border:1px solid #263042;border-radius:10px;padding:8px 10px;outline:none}
+    input[type="number"]:focus{box-shadow:0 0 0 4px var(--ring);border-color:var(--accent)}
+    .muted{color:var(--muted)}
+    .category{font-weight:800;letter-spacing:.3px;color:#9ce6b2;margin:8px 2px}
+    .footer{margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div>
+        <div style="font-size:22px;font-weight:800;">🌿 Green Wonderland • Billing</div>
+        <div class="muted" id="who"></div>
+      </div>
+      <div class="footer">
+        <a class="btn btn-ghost" href="./index.html">Home</a>
+        <button class="btn btn-ghost" id="logout">Logout</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card sect">
+        <h3>Items</h3>
+        <div class="muted" style="margin-bottom:10px">Pick items and set quantities. Prices are RP dollars.</div>
+        <div id="items"></div>
+      </div>
+
+      <div class="card sect">
+        <h3>Cart</h3>
+        <div class="summary">
+          <div class="row"><span class="muted">Subtotal</span><span id="subtotal">$0</span></div>
+          <div class="row"><label class="muted" for="discount">Discount</label><input id="discount" type="number" min="0" value="0"/></div>
+          <div class="row total"><span>Total</span><span id="total">$0</span></div>
+        </div>
+        <div class="footer">
+          <button id="clear" class="btn btn-ghost">Clear</button>
+          <button id="save" class="btn btn-primary" disabled>Save Sale</button>
+          <span id="status" class="badge" style="display:none"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script>
+    // 🔧 Replace with your project details
+    const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
+
+    // Path helpers for GitHub Pages (match your repo name & case)
+    const BASE_PATH = "/Green-Wonderland/";
+    const LOGIN_URL = window.location.origin + BASE_PATH; // index.html (login)
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const who = document.getElementById('who');
+    const itemsEl = document.getElementById('items');
+    const subtotalEl = document.getElementById('subtotal');
+    const totalEl = document.getElementById('total');
+    const discountEl = document.getElementById('discount');
+    const saveBtn = document.getElementById('save');
+    const clearBtn = document.getElementById('clear');
+    const statusBadge = document.getElementById('status');
+    const logoutBtn = document.getElementById('logout');
+
+    let session = null;
+    let catalog = []; // [{id,category,name,base_price}]
+    const cart = new Map(); // key: item_id, value: {qty, price, name}
+
+    // Require login
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      session = data.session;
+      if (!session) {
+        // not logged in → send to login page
+        window.location.href = LOGIN_URL;
+        return;
+      }
+      const meta = session.user.user_metadata || {};
+      who.textContent = `Signed in as ${meta.name || meta.full_name || 'Employee'}`;
+      await loadItems();
+      render();
+    })();
+
+    logoutBtn?.addEventListener('click', async ()=>{ await supabase.auth.signOut(); window.location.href = LOGIN_URL; });
+
+    async function loadItems(){
+      const { data, error } = await supabase
+        .from('items')
+        .select('id, category, name, base_price, is_active')
+        .eq('is_active', true)
+        .order('category', { ascending:true })
+        .order('id', { ascending:true });
+      if (error) { console.error(error); alert('Failed to load items'); return; }
+      catalog = data || [];
+      renderItems();
+    }
+
+    function money(n){ return `$${Math.max(0, Math.round(n))}`; }
+
+    function renderItems(){
+      // Group by category
+      const byCat = {};
+      for (const it of catalog){ (byCat[it.category] ||= []).push(it); }
+
+      const frag = document.createDocumentFragment();
+      for (const [cat, arr] of Object.entries(byCat)){
+        const catTitle = document.createElement('div');
+        catTitle.className = 'category';
+        catTitle.textContent = cat;
+        frag.appendChild(catTitle);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'items';
+        for (const it of arr){
+          const pill = document.createElement('div');
+          pill.className = 'pill';
+
+          const left = document.createElement('div');
+          left.innerHTML = `<div class="title">${it.name}</div><div class="price">${money(it.base_price)}</div>`;
+
+          const q = document.createElement('div');
+          q.className = 'qty';
+          const minus = document.createElement('button'); minus.textContent = '−';
+          const input = document.createElement('input'); input.type='number'; input.min='0'; input.value = cart.get(it.id)?.qty || 0;
+          const plus = document.createElement('button'); plus.textContent = '+';
+
+          minus.addEventListener('click', ()=> setQty(it, (parseInt(input.value||'0',10)-1)) );
+          plus.addEventListener('click', ()=> setQty(it, (parseInt(input.value||'0',10)+1)) );
+          input.addEventListener('input', ()=> setQty(it, parseInt(input.value||'0',10)) );
+
+          q.append(minus,input,plus);
+          pill.append(left,q);
+          wrap.appendChild(pill);
+        }
+        frag.appendChild(wrap);
+      }
+      itemsEl.innerHTML = '';
+      itemsEl.appendChild(frag);
+    }
+
+    function setQty(item, qty){
+      qty = Number.isFinite(qty) && qty>0 ? qty : 0;
+      if (qty===0){ cart.delete(item.id); }
+      else { cart.set(item.id, { qty, price:item.base_price, name:item.name }); }
+      render();
+      // Update input box value
+      const inputs = itemsEl.querySelectorAll('input[type="number"]');
+      for (const input of inputs){ /* no-op; we keep user-typed value */ }
+    }
+
+    function sums(){
+      let subtotal = 0;
+      for (const {qty, price} of cart.values()) subtotal += qty*price;
+      const discount = Math.max(0, Math.round(parseInt(discountEl.value||'0',10)));
+      const total = Math.max(0, subtotal - discount);
+      return { subtotal, discount, total };
+    }
+
+    function render(){
+      const { subtotal, discount, total } = sums();
+      subtotalEl.textContent = money(subtotal);
+      totalEl.textContent = money(total);
+      saveBtn.disabled = cart.size===0 || total<=0;
+    }
+
+    clearBtn.addEventListener('click', ()=>{ cart.clear(); render(); });
+    discountEl.addEventListener('input', render);
+
+    saveBtn.addEventListener('click', async ()=>{
+      const { subtotal, discount, total } = sums();
+      if (cart.size===0){ return; }
+      saveBtn.disabled = true; statusBadge.style.display='inline-block'; statusBadge.textContent='Saving…';
+      try{
+        // 1) Insert sale
+        const { data: saleRow, error: saleErr } = await supabase
+          .from('sales')
+          .insert([{ employee_id: session.user.id, subtotal, discount, total }])
+          .select('id')
+          .single();
+        if (saleErr) throw saleErr;
+
+        const sale_id = saleRow.id;
+        // 2) Build line items
+        const lines = [];
+        for (const [item_id, {qty, price}] of cart.entries()){
+          lines.push({ sale_id, item_id, qty, unit_price: price, line_total: qty*price });
+        }
+        // 3) Insert sale_items
+        const { error: liErr } = await supabase.from('sale_items').insert(lines);
+        if (liErr) throw liErr;
+
+        // Success UI
+        statusBadge.textContent = 'Saved!';
+        statusBadge.style.background = '#064e3b';
+        statusBadge.style.color = '#bbf7d0';
+        cart.clear();
+        discountEl.value = 0;
+        render();
+      }catch(e){
+        console.error(e);
+        statusBadge.textContent = 'Error';
+        statusBadge.style.background = '#3f1d1d';
+        statusBadge.style.color = '#fecaca';
+        alert('Save failed: '+ (e?.message||e));
+      }finally{
+        setTimeout(()=>{ statusBadge.style.display='none'; saveBtn.disabled=false; }, 1500);
+      }
+    });
+  </script>
+</body>
+</html>
