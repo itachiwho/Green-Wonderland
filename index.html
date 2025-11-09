@@ -1,6 +1,82 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Green Wonderland</title></head>
-<body style="font-family:sans-serif;text-align:center;padding:40px;">
-  <h1>Green Wonderland Portal</h1>
-  <p>Setup in progress…</p>
-</body></html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Green Wonderland • Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; background: #0b1220; color: #e5e7eb; }
+    .card { background: #111827; padding: 28px; border-radius: 14px; width: min(520px, 92vw); box-shadow: 0 10px 30px #0007; }
+    h1 { margin: 0 0 8px; }
+    button { cursor: pointer; padding: 10px 14px; border: 0; border-radius: 10px; font-weight: 600; }
+    .primary { background: #22c55e; color: #062b12; }
+    .muted { background: #1f2937; color: #cbd5e1; }
+    .row { display: flex; gap: 10px; margin-top: 14px; }
+    code { background:#0f172a; padding:2px 6px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Green Wonderland Portal</h1>
+    <p id="status">Checking session…</p>
+    <div class="row" id="actions" style="display:none;">
+      <button class="primary" id="login">Login with Discord</button>
+      <button class="muted" id="logout">Logout</button>
+    </div>
+    <p style="margin-top:12px; font-size:14px; opacity:.9;">
+      After you log in the first time, we’ll create your profile automatically.
+    </p>
+  </div>
+
+  <!-- Supabase JS (CDN) -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script>
+    // 1) Replace these two with your values from Supabase → Project Settings → API
+    const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4ZGRtb2locWRodmJxZGhycXloIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NDE0MjksImV4cCI6MjA3ODIxNzQyOX0.0IvlzHHCJ5kGlLJynGmePhq0AXkBsIXShLsX2L_ZZcY";
+
+    // 2) Init client
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const statusEl = document.getElementById('status');
+    const actionsEl = document.getElementById('actions');
+    const loginBtn = document.getElementById('login');
+    const logoutBtn = document.getElementById('logout');
+
+    // 3) Session check on load
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        statusEl.textContent = `Logged in as ${session.user.user_metadata?.name || session.user.email || session.user.id}`;
+        actionsEl.style.display = 'flex';
+        loginBtn.style.display = 'none';
+      } else {
+        statusEl.textContent = "You are not logged in.";
+        actionsEl.style.display = 'flex';
+        logoutBtn.style.display = 'none';
+      }
+    })();
+
+    // 4) Login with Discord
+    loginBtn?.addEventListener('click', async () => {
+      const redirectTo = "https://itachiwho.github.io/Green-Wonderland/"; // same as your Site URL
+      await supabase.auth.signInWithOAuth({
+        provider: 'discord',
+        options: { redirectTo }
+      });
+    });
+
+    // 5) Logout
+    logoutBtn?.addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      location.reload();
+    });
+
+    // 6) React to auth state changes (if needed later)
+    supabase.auth.onAuthStateChange((_event, _session) => {
+      // you can force a refresh or route guard here in future
+    });
+  </script>
+</body>
+</html>
