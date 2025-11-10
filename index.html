@@ -32,109 +32,117 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script>
-    // 🔧 Your project details
-    const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>
+  // 🔧 Your project details
+  const SUPABASE_URL = "https://dxddmoihqdhvbqdhrqyh.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_hloy0AR6ZXEE4ECb21ntGA_LMyI4HkZ";
 
-    // GitHub Pages paths (must match repo name & case)
-    const BASE_PATH   = "/Green-Wonderland/";
-    const BASE_URL    = window.location.origin + BASE_PATH;              // e.g., .../Green-Wonderland/
-    const BILLING_URL = window.location.origin + BASE_PATH + "billing.html";
+  // GitHub Pages paths (must match repo name & case)
+  const BASE_PATH   = "/Green-Wonderland/";
+  const BASE_URL    = window.location.origin + BASE_PATH;              // e.g., .../Green-Wonderland/
+  const BILLING_URL = window.location.origin + BASE_PATH + "billing.html";
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const statusEl = document.getElementById('status');
-    const actionsEl = document.getElementById('actions');
-    const loginBtn = document.getElementById('login');
-    const logoutBtn = document.getElementById('logout');
-    const debugEl = document.getElementById('debug');
+  const statusEl = document.getElementById('status');
+  const actionsEl = document.getElementById('actions');
+  const loginBtn = document.getElementById('login');
+  const logoutBtn = document.getElementById('logout');
+  const debugEl = document.getElementById('debug');
 
-    const log = (data) => {
-      try {
-        debugEl.textContent += (typeof data === "string" ? data : JSON.stringify(data, null, 2)) + "\n";
-      } catch {}
-      console.log(data);
-    };
+  const log = (data) => {
+    try { debugEl.textContent += (typeof data === "string" ? data : JSON.stringify(data, null, 2)) + "\n"; } catch {}
+    console.log("[index]", data);
+  };
 
-    (async () => {
-      log({ SUPABASE_URL, keyPrefix: SUPABASE_ANON_KEY.slice(0, 10) + "..." });
-      log({ href: window.location.href });
+  // ✅ React to auth events (handles “session arrives a bit later”)
+  supabase.auth.onAuthStateChange((event, session) => {
+    log({ auth_event: event, uid: session?.user?.id });
+    if (event === "SIGNED_IN" && session?.user) {
+      window.location.href = BILLING_URL;
+    }
+    if (event === "SIGNED_OUT") {
+      actionsEl.style.display = "flex";
+      logoutBtn.style.display = "none";
+      statusEl.textContent = "You are not logged in.";
+    }
+  });
 
-      // Handle OAuth return: code flow or (older) hash tokens
-      const href = window.location.href;
-      const url = new URL(href);
-      const hasCode = url.searchParams.get("code");
-      const errDesc = url.searchParams.get("error_description");
+  (async () => {
+    log({ SUPABASE_URL, keyPrefix: SUPABASE_ANON_KEY.slice(0, 10) + "..." });
+    log({ href: window.location.href });
 
-      if (errDesc) {
-        statusEl.textContent = "OAuth error: " + errDesc;
-        log("OAuth error_description: " + errDesc);
-      }
+    // Handle OAuth return: code flow or (older) hash tokens
+    const href = window.location.href;
+    const url = new URL(href);
+    const hasCode = url.searchParams.get("code");
+    const errDesc = url.searchParams.get("error_description");
+    if (errDesc) {
+      statusEl.textContent = "OAuth error: " + errDesc;
+      log("OAuth error_description: " + errDesc);
+    }
 
-      if (hasCode) {
-        log("Detected code param; exchanging for session…");
-        const { error } = await supabase.auth.exchangeCodeForSession(href);
-        // Clean URL either way
-        history.replaceState({}, "", BASE_URL);
-        if (error) {
-          statusEl.textContent = "Login failed: " + error.message;
-          log({ exchange_error: error });
-        } else {
-          // ✅ Go straight to Billing after successful login
+    if (hasCode) {
+      log("Detected code param; exchanging for session…");
+      const { error } = await supabase.auth.exchangeCodeForSession(href);
+      history.replaceState({}, "", BASE_URL); // clean URL
+      if (error) {
+        statusEl.textContent = "Login failed: " + error.message;
+        log({ exchange_error: error });
+      } else {
+        // Double-check session (sometimes arrives micro-late—onAuthStateChange will also catch it)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
           window.location.href = BILLING_URL;
           return;
+        } else {
+          statusEl.textContent = "Code exchanged—waiting for session… If it doesn’t redirect, click Login again.";
         }
-      } else if (href.includes("#access_token=")) {
-        // Clean legacy implicit hash and go to Billing
-        history.replaceState({}, "", BASE_URL);
-        window.location.href = BILLING_URL;
-        return;
       }
+    } else if (href.includes("#access_token=")) {
+      // Clean legacy implicit hash
+      history.replaceState({}, "", BASE_URL);
+    }
 
-      // Check existing session
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        statusEl.textContent = "Session check failed: " + error.message;
-        log({ getSession_error: error });
-        actionsEl.style.display = "flex";
-        logoutBtn.style.display = "none";
-        return;
-      }
+    // Check existing session
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      statusEl.textContent = "Session check failed: " + error.message;
+      log({ getSession_error: error });
+      actionsEl.style.display = "flex";
+      logoutBtn.style.display = "none";
+      return;
+    }
 
-      if (session?.user) {
-        // ✅ Already logged in → go to Billing
-        window.location.href = BILLING_URL;
-        return;
-      } else {
-        statusEl.textContent = "You are not logged in.";
-        actionsEl.style.display = "flex";
-        logoutBtn.style.display = "none";
-      }
-    })();
+    if (session?.user) {
+      window.location.href = BILLING_URL;
+      return;
+    } else {
+      statusEl.textContent = "You are not logged in.";
+      actionsEl.style.display = "flex";
+      logoutBtn.style.display = "none";
+    }
+  })();
 
-    // Step 3: Login with Discord (only 'identify' scope, no email)
-    loginBtn?.addEventListener("click", async () => {
-      log("Starting Discord OAuth with redirectTo=" + BASE_URL);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "discord",
-        options: {
-          redirectTo: BASE_URL,
-          scopes: "identify"   // request no email scope
-        }
-      });
-      if (error) {
-        alert("OAuth error: " + error.message);
-        log({ oauth_error: error });
-      }
+  // Login (scope: identify only)
+  loginBtn?.addEventListener("click", async () => {
+    log("Starting Discord OAuth with redirectTo=" + BASE_URL);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "discord",
+      options: { redirectTo: BASE_URL, scopes: "identify" }
     });
+    if (error) {
+      alert("OAuth error: " + error.message);
+      log({ oauth_error: error });
+    }
+  });
 
-    // Step 4: Logout
-    logoutBtn?.addEventListener("click", async () => {
-      await supabase.auth.signOut();
-      location.reload();
-    });
-  </script>
+  // Logout
+  logoutBtn?.addEventListener("click", async () => {
+    await supabase.auth.signOut();
+    location.reload();
+  });
+</script>
 </body>
 </html>
