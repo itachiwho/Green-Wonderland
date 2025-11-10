@@ -101,6 +101,17 @@ input[type=number] {
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // Handle a possible OAuth return here too (safety)
+(async () => {
+  const href = window.location.href;
+  const url = new URL(href);
+  if (url.searchParams.get("code")) {
+    // Try to complete the session here, then clean URL
+    await supabase.auth.exchangeCodeForSession(href);
+    history.replaceState({}, "", window.location.origin + BASE_PATH + "billing.html");
+  }
+})();
+
     const who = document.getElementById('who');
     const itemsEl = document.getElementById('items');
     const subtotalEl = document.getElementById('subtotal');
