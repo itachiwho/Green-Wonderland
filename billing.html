@@ -101,6 +101,27 @@ input[type=number] {
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // If billing ever receives ?code=..., finish the login here too:
+async function waitForSession(maxMs = 2500) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) return session;
+    await new Promise(r => setTimeout(r, 150));
+  }
+  return null;
+}
+
+(async () => {
+  const href = window.location.href;
+  const url = new URL(href);
+  if (url.searchParams.get("code")) {
+    await supabase.auth.exchangeCodeForSession(href);
+    history.replaceState({}, "", window.location.origin + BASE_PATH + "billing.html");
+    await waitForSession(); // ⬅️ give the session a moment to persist
+  }
+})();
+
     // Handle a possible OAuth return here too (safety)
 (async () => {
   const href = window.location.href;
