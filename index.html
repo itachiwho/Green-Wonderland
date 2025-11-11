@@ -43,7 +43,9 @@
   const BASE_URL    = window.location.origin + BASE_PATH;              // e.g., .../Green-Wonderland/
   const BILLING_URL = window.location.origin + BASE_PATH + "billing.html";
 
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true }
+  });
 
   const statusEl = document.getElementById('status');
   const actionsEl = document.getElementById('actions');
@@ -56,7 +58,18 @@
     console.log("[index]", data);
   };
 
-  // ✅ React to auth events (handles “session arrives a bit later”)
+  // ── helper: wait up to ~2.5s for session after code exchange
+  async function waitForSession(maxMs = 2500) {
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) return session;
+      await new Promise(r => setTimeout(r, 150));
+    }
+    return null;
+  }
+
+  // React to auth events (safety net)
   supabase.auth.onAuthStateChange((event, session) => {
     log({ auth_event: event, uid: session?.user?.id });
     if (event === "SIGNED_IN" && session?.user) {
@@ -73,15 +86,11 @@
     log({ SUPABASE_URL, keyPrefix: SUPABASE_ANON_KEY.slice(0, 10) + "..." });
     log({ href: window.location.href });
 
-    // Handle OAuth return: code flow or (older) hash tokens
     const href = window.location.href;
     const url = new URL(href);
     const hasCode = url.searchParams.get("code");
     const errDesc = url.searchParams.get("error_description");
-    if (errDesc) {
-      statusEl.textContent = "OAuth error: " + errDesc;
-      log("OAuth error_description: " + errDesc);
-    }
+    if (errDesc) { statusEl.textContent = "OAuth error: " + errDesc; log("OAuth error_description: " + errDesc); }
 
     if (hasCode) {
       log("Detected code param; exchanging for session…");
@@ -91,21 +100,16 @@
         statusEl.textContent = "Login failed: " + error.message;
         log({ exchange_error: error });
       } else {
-        // Double-check session (sometimes arrives micro-late—onAuthStateChange will also catch it)
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          window.location.href = BILLING_URL;
-          return;
-        } else {
-          statusEl.textContent = "Code exchanged—waiting for session… If it doesn’t redirect, click Login again.";
-        }
+        // ✅ wait briefly for the session to be persisted, then go
+        const session = await waitForSession();
+        if (session?.user) { window.location.href = BILLING_URL; return; }
+        statusEl.textContent = "Code exchanged — waiting for session… Click Login again if this persists.";
       }
     } else if (href.includes("#access_token=")) {
-      // Clean legacy implicit hash
       history.replaceState({}, "", BASE_URL);
     }
 
-    // Check existing session
+    // Existing session?
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error) {
       statusEl.textContent = "Session check failed: " + error.message;
@@ -114,15 +118,11 @@
       logoutBtn.style.display = "none";
       return;
     }
+    if (session?.user) { window.location.href = BILLING_URL; return; }
 
-    if (session?.user) {
-      window.location.href = BILLING_URL;
-      return;
-    } else {
-      statusEl.textContent = "You are not logged in.";
-      actionsEl.style.display = "flex";
-      logoutBtn.style.display = "none";
-    }
+    statusEl.textContent = "You are not logged in.";
+    actionsEl.style.display = "flex";
+    logoutBtn.style.display = "none";
   })();
 
   // Login (scope: identify only)
@@ -132,10 +132,7 @@
       provider: "discord",
       options: { redirectTo: BASE_URL, scopes: "identify" }
     });
-    if (error) {
-      alert("OAuth error: " + error.message);
-      log({ oauth_error: error });
-    }
+    if (error) { alert("OAuth error: " + error.message); log({ oauth_error: error }); }
   });
 
   // Logout
@@ -144,5 +141,6 @@
     location.reload();
   });
 </script>
+
 </body>
 </html>
